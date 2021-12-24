@@ -27,16 +27,11 @@ Excluding Dec 23 2020 cause they messed up inputting the data.
 */
 
 SELECT	Report_Date, 
-		confirmed_cases - (LAG(confirmed_cases,1) OVER (ORDER BY Report_Date)) as new_confirmed_cases, 
-		probable_cases - (LAG(probable_cases,1) OVER (ORDER BY Report_Date)) as new_probable_cases,
-		new_cases,
-		round( (new_cases +
-		LAG(new_cases,1) OVER (ORDER BY Report_Date) +
-		LAG(new_cases,2) OVER (ORDER BY Report_Date) +
-		LAG(new_cases,3) OVER (ORDER BY Report_Date) +
-		LAG(new_cases,4) OVER (ORDER BY Report_Date) +
-		LAG(new_cases,5) OVER (ORDER BY Report_Date) +
-		LAG(new_cases,6) OVER (ORDER BY Report_Date))/7,0) as seven_day_avg
+	confirmed_cases - (LAG(confirmed_cases,1) OVER (ORDER BY Report_Date)) as new_confirmed_cases, 
+	probable_cases - (LAG(probable_cases,1) OVER (ORDER BY Report_Date)) as new_probable_cases,
+	new_cases,
+	ROUND((AVG(new_cases) OVER (ORDER BY Report_Date
+					ROWS BETWEEN 6 PRECEDING AND CURRENT ROW)),0) as seven_day_avg
 FROM va_covid..va_covid_summary
 WHERE Report_Date not in ('2020-12-23') ;
 
@@ -55,24 +50,18 @@ Excluded values had data entry problems.
 
 WITH new_death (Report_Date, new_deaths, new_confirmed_deaths, new_probable_deaths) AS 
 (
-SELECT Report_Date,
-		total_deaths - (LAG(total_deaths,1) OVER (ORDER BY Report_Date)) as new_deaths,
-		confirmed_deaths - (LAG(confirmed_deaths,1) OVER (ORDER BY Report_Date)) as new_confirmed_deaths, 
-		probable_deaths-(LAG(probable_deaths,1) OVER (ORDER BY Report_Date)) as new_probable_deaths
+SELECT 	Report_Date,
+	total_deaths - (LAG(total_deaths,1) OVER (ORDER BY Report_Date)) as new_deaths,
+	confirmed_deaths - (LAG(confirmed_deaths,1) OVER (ORDER BY Report_Date)) as new_confirmed_deaths, 
+	probable_deaths-(LAG(probable_deaths,1) OVER (ORDER BY Report_Date)) as new_probable_deaths
 FROM va_covid..va_covid_summary
 WHERE Report_Date not in ('2020-12-23','2021-04-27','2021-05-09')
 )
 SELECT *,
-	round( (new_deaths +
-	LAG(new_deaths,1) OVER (ORDER BY Report_Date) +
-	LAG(new_deaths,2) OVER (ORDER BY Report_Date) +
-	LAG(new_deaths,3) OVER (ORDER BY Report_Date) +
-	LAG(new_deaths,4) OVER (ORDER BY Report_Date) +
-	LAG(new_deaths,5) OVER (ORDER BY Report_Date) +
-	LAG(new_deaths,6) OVER (ORDER BY Report_Date))/7,0) as seven_day_avg
+	ROUND((AVG(new_deaths) OVER (ORDER BY Report_Date
+					ROWS BETWEEN 6 PRECEDING AND CURRENT ROW)),0) as seven_day_avg
 FROM new_death
 ORDER BY Report_Date;
-
 
 -------------------------------------------------------------------------------------------------------
 /*--------------------------------------- Hospitalizations---------------------------------------*/
@@ -88,24 +77,18 @@ Excluded values had data entry problems.
 
 WITH new_hosp (Report_Date, new_hospitalizations, new_confirmed_hospitalizations, new_probable_hospitalizations) AS 
 (
-SELECT Report_Date,
-		total_hospitalizations - (LAG(total_hospitalizations,1) OVER (ORDER BY Report_Date)) as new_hospitalizations,
-		confirmed_hospitalizations - (LAG(confirmed_hospitalizations,1) OVER (ORDER BY Report_Date)) as new_confirmed_hospitalizations, 
-		probable_hospitalizations-(LAG(probable_hospitalizations,1) OVER (ORDER BY Report_Date)) as new_probable_hospitalizations
+SELECT 	Report_Date,
+	total_hospitalizations - (LAG(total_hospitalizations,1) OVER (ORDER BY Report_Date)) as new_hospitalizations,
+	confirmed_hospitalizations - (LAG(confirmed_hospitalizations,1) OVER (ORDER BY Report_Date)) as new_confirmed_hospitalizations, 
+	probable_hospitalizations-(LAG(probable_hospitalizations,1) OVER (ORDER BY Report_Date)) as new_probable_hospitalizations
 FROM va_covid..va_covid_summary
 WHERE Report_Date not in ('2020-12-23','2021-04-27','2021-05-09')
 )
-SELECT *,
-	round( (new_hospitalizations +
-	LAG(new_hospitalizations,1) OVER (ORDER BY Report_Date) +
-	LAG(new_hospitalizations,2) OVER (ORDER BY Report_Date) +
-	LAG(new_hospitalizations,3) OVER (ORDER BY Report_Date) +
-	LAG(new_hospitalizations,4) OVER (ORDER BY Report_Date) +
-	LAG(new_hospitalizations,5) OVER (ORDER BY Report_Date) +
-	LAG(new_hospitalizations,6) OVER (ORDER BY Report_Date))/7,0) as seven_day_avg
+SELECT 	*,
+	round( AVG(new_hospitalizations) OVER (ORDER BY Report_Date
+						ROWS BETWEEN 6 PRECEDING AND CURRENT ROW),0) as seven_day_avg
 FROM new_hosp
 ORDER BY Report_Date;
-
 
 ------------------------------------------------------------------------------------------------
 /*-------------------------------- Vaccination Summary Table ---------------------------------*/
@@ -142,17 +125,16 @@ so I can manipulate the information gathered without having to manually run the 
 WITH vax_dose (administration_date, dose_number, daily_number_of_shots) AS 
 (
 SELECT	administration_date,
-		dose_number,
-		SUM(doses_administered) as daily_number_of_shots
+	dose_number,
+	SUM(doses_administered) as daily_number_of_shots
 FROM va_covid..va_covid_vaccination
 WHERE vaccine_manufacturer != 'J&J'			-- since the summary is only focusing on 2 shot regimines
 GROUP BY administration_date, dose_number
 )
 SELECT	*,
-		SUM(daily_number_of_shots) OVER 
-		(Partition by dose_number 
-		Order by administration_date, dose_number) as rolling_total_shots
-INTO #vax_shot_count	--this creates a temporary table
+	SUM(daily_number_of_shots) OVER 
+	(PARTITION BY dose_number ORDER BY administration_date, dose_number) as rolling_total_shots
+INTO #vax_shot_count				--this creates a temporary table
 FROM vax_dose
 WHERE administration_date is not null		-- this excludes Federal doses that were not reported to VDH on a daily basis
 ORDER BY administration_date, dose_number;
@@ -166,10 +148,9 @@ ORDER BY administration_date, dose_number;
 */
 
 SELECT	*,
-		(SUM(daily_number_of_shots) OVER (Partition BY dose_number 
-										ORDER BY administration_date
-										ROWS BETWEEN UNBOUNDED PRECEDING 
-												AND 14 PRECEDING)) as fully_vaxxd
+	(SUM(daily_number_of_shots) OVER (Partition BY dose_number ORDER BY administration_date
+								ROWS BETWEEN UNBOUNDED PRECEDING 
+								AND 14 PRECEDING)) as fully_vaxxd
 INTO #vax_dose_2
 FROM #vax_shot_count
 WHERE dose_number = 2;
@@ -180,8 +161,8 @@ WHERE dose_number = 2;
 -- Columns: Date, Daily Number of Shots, Rolling Total of Shots (per dose number)
 --
 SELECT	administration_date,
-		daily_number_of_shots,
-		rolling_total_shots
+	daily_number_of_shots,
+	rolling_total_shots
 INTO #vax_dose_1
 from #vax_shot_count 
 where dose_number = 1;
@@ -202,11 +183,11 @@ Columns: administration_date, daily_dose_1_shots, daily_dose_2_shots,
 */
 
 SELECT	one.administration_date,
-		one.daily_number_of_shots as daily_dose_1_shots,
-		ISNULL(two.daily_number_of_shots, 0) as daily_dose_2_shots,
-		one.rolling_total_shots as cummulative_dose_1,
-		ISNULL(two.rolling_total_shots,0) as cummulative_dose_2,
-		ISNULL(two.Fully_Vaxxd,0) as fully_vaccinated
+	one.daily_number_of_shots as daily_dose_1_shots,
+	ISNULL(two.daily_number_of_shots, 0) as daily_dose_2_shots,
+	one.rolling_total_shots as cummulative_dose_1,
+	ISNULL(two.rolling_total_shots,0) as cummulative_dose_2,
+	ISNULL(two.Fully_Vaxxd,0) as fully_vaccinated
 FROM #vax_dose_1 one
 	LEFT JOIN #vax_dose_2 two
 	ON one.administration_date = two.administration_date
